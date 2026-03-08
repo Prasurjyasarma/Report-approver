@@ -1,16 +1,24 @@
+import json
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from excel_read.excel_read import ExcelRead
 from models.claim_input import ClaimInput
 from models.claim_validation import ClaimValidation
+from models.claim_result import ClaimResult
 from Rag.rag import PolicyRAG
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import SystemMessage, HumanMessage
+from dotenv import load_dotenv
+from client.system_prompt import SystemPrompt
 
+load_dotenv()
 
 #Shared state that flows through the graph gets data from pydentic model
 class ClaimState(TypedDict):
     claims: list[dict]               
-    validated_claims: list[dict]    
+    validated_claims: list[dict]
+    claim_results: list[dict]    
 
 
 # Node 1 - Read claims from Excel
@@ -95,6 +103,39 @@ def rag_validation_node(state: ClaimState) -> ClaimState:
     return {"validated_claims": validated_claims}
 
 
+# Node 3 - Pass validated claims to LLM 
+def llm_processing_node(state: ClaimState) -> ClaimState:
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.2)
+    claim_results = []
+
+    for claim_data in state["validated_claims"]:
+        # Validation against pydentic rules
+        validated = ClaimValidation(**claim_data)
+
+        messages = [
+            SystemMessage(content=SystemPrompt.CLAIMS_ADJUDICATOR),
+            HumanMessage(content=f"Adjudicate this claim:\n{validated.model_dump_json(indent=2)}"),
+        ]
+
+        response = llm.invoke(messages)
+
+        try:
+            result_json = json.loads(response.content)
+            result = ClaimResult(**result_json)
+
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"LLM response parse error for {validated.claim_id}: {e}")
+            result = ClaimResult(
+                claim_id=validated.claim_id,
+                decision="PENDING",
+                reason="LLM response could not be parsed",
+                flags=["parse_error"],
+                confidence=0.0,
+            )
+        claim_results.append(result.model_dump())
+
+    print(f"Processed {len(claim_results)} claim(s) through LLM.")
+    return {"claim_results": claim_results}
 
 
 # MAIN Graph
@@ -104,11 +145,13 @@ def build_graph():
     #nodes
     graph.add_node("read_excel", read_excel_node)
     graph.add_node("rag_validation", rag_validation_node)
+    graph.add_node("llm_processing", llm_processing_node)
   
     #edges
     graph.add_edge(START, "read_excel")
     graph.add_edge("read_excel", "rag_validation")
-    graph.add_edge("rag_validation", END)
+    graph.add_edge("rag_validation", "llm_processing")
+    graph.add_edge("llm_processing", END)
 
     return graph.compile()
 
@@ -119,10 +162,11 @@ if __name__ == "__main__":
     result = app.invoke({
         "claims": [],
         "validated_claims": [],
+        "claim_results": [],
     })
 
-    print("\n=== Validated Claims ===\n")
-    for v in result["validated_claims"]:
-        validated = ClaimValidation(**v)
-        print(validated.model_dump_json(indent=2))
+    print("\n=== Claim Results ===\n")
+    for r in result["claim_results"]:
+        claim_result = ClaimResult(**r)
+        print(claim_result.model_dump_json(indent=2))
         print("---")
