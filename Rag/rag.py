@@ -1,5 +1,6 @@
 import os
 import chromadb
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 POLICY_FILE = os.path.join(CURRENT_DIR, "safe_claims_policy_rules_v2.txt")
@@ -11,8 +12,18 @@ SECTION_DELIMITER = "-----"
 class PolicyRAG:
     def __init__(self):
         self.client = chromadb.PersistentClient(path=CHROMA_DIR)
+
+        self.embedding_function = OpenAIEmbeddingFunction(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
+            api_type="azure",
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            deployment_id=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+        )
+
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
+            embedding_function=self.embedding_function,
             metadata={"hnsw:space": "cosine"},
         )
 
@@ -20,8 +31,6 @@ class PolicyRAG:
         if self.collection.count() == 0:
             chunks = self._load_and_chunk()
             self._build_db(chunks)
-
-
 
     def _load_and_chunk(self) -> list[dict]:
         """
@@ -60,14 +69,18 @@ class PolicyRAG:
 
         for i, chunk in enumerate(chunks):
             documents.append(chunk["text"])
-            metadatas.append({"title": chunk["title"], "section_index": i})
+            metadatas.append({
+                "title": chunk["title"],
+                "section_index": i
+            })
             ids.append(f"section_{i}")
 
         self.collection.add(
             documents=documents,
             metadatas=metadatas,
-            ids=ids,
+            ids=ids
         )
+
         print(f"Ingested {len(chunks)} policy sections into ChromaDB.")
 
     def query(self, question: str, n_results: int = 3) -> list[str]:
@@ -83,7 +96,7 @@ class PolicyRAG:
         return results["documents"][0] if results["documents"] else []
 
 
-# TEST for RAG 
+# TEST for RAG
 # if __name__ == "__main__":
 #     rag = PolicyRAG()
 #     print(f"Collection has {rag.collection.count()} sections.\n")

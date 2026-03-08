@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -7,18 +8,20 @@ from models.claim_input import ClaimInput
 from models.claim_validation import ClaimValidation
 from models.claim_result import ClaimResult
 from Rag.rag import PolicyRAG
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import AzureChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from dotenv import load_dotenv
 from client.system_prompt import SystemPrompt
 
 load_dotenv()
 
-#Shared state that flows through the graph gets data from pydentic model
+# Shared state that flows through the graph gets data from pydentic model
+
+
 class ClaimState(TypedDict):
-    claims: list[dict]               
+    claims: list[dict]
     validated_claims: list[dict]
-    claim_results: list[dict]    
+    claim_results: list[dict]
 
 
 # Node 1 - Read claims from Excel
@@ -49,15 +52,6 @@ def rag_validation_node(state: ClaimState) -> ClaimState:
             f"Is procedure {claim.procedure_code} covered under insurance plan?",
             n_results=2,
         )
-        fraud_results = rag.query(
-            f"What are fraud indicators for a ${claim.billed_amount} claim?",
-            n_results=2,
-        )
-        duplicate_results = rag.query(
-            f"How to detect duplicate claims for patient {claim.patient_id} "
-            f"with procedure {claim.procedure_code} on {claim.date_of_service}?",
-            n_results=2,
-        )
         necessity_results = rag.query(
             f"Is procedure {claim.procedure_code} medically necessary "
             f"for diagnosis {claim.diagnosis_code}?",
@@ -68,18 +62,32 @@ def rag_validation_node(state: ClaimState) -> ClaimState:
             f"{claim.procedure_code} valid under ICD-10 and CPT?",
             n_results=2,
         )
-
-        requires_auth = any("authorization" in r.lower() for r in auth_results)
+        AUTH_REQUIRED_PROCEDURES = {"97110"}
+        requires_auth = claim.procedure_code in AUTH_REQUIRED_PROCEDURES
         is_covered = any("covered" in r.lower() for r in coverage_results)
 
         fraud_indicators = []
-        for r in fraud_results:
-            if "unusually high" in r.lower() and claim.billed_amount > 500:
-                fraud_indicators.append("High billed amount")
-            if "repeated procedures" in r.lower():
-                fraud_indicators.append("Potential repeated procedure")
 
-        duplicate_check = any("duplicate" in r.lower() for r in duplicate_results)
+        # High billed amount
+        if claim.billed_amount > 500:
+            fraud_indicators.append("High billed amount")
+
+        # repeated procedure for same patient
+        repeat_count = sum(
+            1 for c in state["claims"]
+            if c["patient_id"] == claim.patient_id
+            and c["procedure_code"] == claim.procedure_code
+        )
+        if repeat_count > 1:
+            fraud_indicators.append("Potential repeated procedure")
+
+        duplicate_check = any(
+            c["patient_id"] == claim.patient_id and
+            c["procedure_code"] == claim.procedure_code and
+            c["date_of_service"] == claim.date_of_service and
+            c["claim_id"] != claim.claim_id
+            for c in state["claims"]
+        )
         medical_necessity = any(
             "medically necessary" in r.lower() or "medical necessity" in r.lower()
             for r in necessity_results
@@ -103,9 +111,15 @@ def rag_validation_node(state: ClaimState) -> ClaimState:
     return {"validated_claims": validated_claims}
 
 
-# Node 3 - Pass validated claims to LLM 
+# Node 3 - Pass validated claims to LLM
 def llm_processing_node(state: ClaimState) -> ClaimState:
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-lite", temperature=0.2)
+    llm = AzureChatOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_KEY"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_deployment=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT"),
+        model_kwargs={"response_format": {"type": "json_object"}}
+    )
     claim_results = []
 
     for claim_data in state["validated_claims"]:
@@ -114,7 +128,8 @@ def llm_processing_node(state: ClaimState) -> ClaimState:
 
         messages = [
             SystemMessage(content=SystemPrompt.CLAIMS_ADJUDICATOR),
-            HumanMessage(content=f"Adjudicate this claim:\n{validated.model_dump_json(indent=2)}"),
+            HumanMessage(
+                content=f"Adjudicate this claim:\n{validated.model_dump_json(indent=2)}"),
         ]
 
         response = llm.invoke(messages)
@@ -142,12 +157,12 @@ def llm_processing_node(state: ClaimState) -> ClaimState:
 def build_graph():
     graph = StateGraph(ClaimState)
 
-    #nodes
+    # nodes
     graph.add_node("read_excel", read_excel_node)
     graph.add_node("rag_validation", rag_validation_node)
     graph.add_node("llm_processing", llm_processing_node)
-  
-    #edges
+
+    # edges
     graph.add_edge(START, "read_excel")
     graph.add_edge("read_excel", "rag_validation")
     graph.add_edge("rag_validation", "llm_processing")
