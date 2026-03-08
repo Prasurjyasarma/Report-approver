@@ -1,0 +1,247 @@
+
+SAFE CLAIMS ADJUDICATION POLICY – POC VERSION
+(Adapted from Healthcare Claims & Adjudication Standards)
+
+---------------------------------------------------------------------
+1. PURPOSE
+---------------------------------------------------------------------
+This document defines simplified but realistic policy rules for
+automated healthcare claim adjudication within the Safe Claims
+Agentic AI Proof-of-Concept system.
+
+These policies are inspired by healthcare payer adjudication
+standards and define how claims should be validated, reviewed,
+and reimbursed by an automated claims agent.
+
+The purpose of these rules is to enable an AI system to:
+• ingest claim data
+• interpret coverage rules
+• validate coding standards
+• detect anomalies and fraud
+• determine claim outcomes
+
+These rules simulate the behavior of real insurance claim
+adjudication engines used by healthcare payers.
+
+---------------------------------------------------------------------
+2. CLAIM DATA REQUIREMENTS
+---------------------------------------------------------------------
+Each claim submitted to the Safe Claims system must include
+the following mandatory information:
+
+• Claim ID
+• Patient Identifier
+• Provider Identifier
+• Date of Service
+• Diagnosis Code (ICD-10)
+• Procedure Code (CPT / HCPCS)
+• Billed Amount
+
+If any required field is missing, the claim must be flagged
+for manual review.
+
+Example Outcome:
+Decision: PENDING
+Reason: Missing required claim data
+
+---------------------------------------------------------------------
+3. ELIGIBILITY VERIFICATION
+---------------------------------------------------------------------
+Prior to adjudicating any claim, the system must verify
+that the patient was eligible for coverage on the date of service.
+
+Eligibility checks include:
+• Active insurance policy
+• Valid coverage period
+• Member enrollment status
+
+If a member is not eligible on the date of service:
+
+Decision: REJECTED
+Reason: Member not eligible for coverage
+
+---------------------------------------------------------------------
+4. MEDICAL CODING REQUIREMENTS
+---------------------------------------------------------------------
+All healthcare claims must use standardized medical coding systems.
+
+Accepted code systems include:
+
+• ICD‑10‑CM – Diagnosis classification
+• CPT – Medical procedures
+• HCPCS – Healthcare services and supplies
+
+Claims containing invalid, outdated, or unsupported codes
+must be rejected or returned for correction.
+
+Example:
+
+Decision: REJECTED
+Reason: Invalid procedure code
+
+---------------------------------------------------------------------
+5. COVERAGE VALIDATION
+---------------------------------------------------------------------
+Insurance plans define which procedures and services are covered.
+
+When adjudicating a claim, the system must verify that:
+
+• The billed procedure is included in the policy benefits
+• The service category is covered
+• The service meets plan limitations
+
+If a procedure is not covered under the member’s plan:
+
+Decision: REJECTED
+Reason: Non‑covered service
+
+---------------------------------------------------------------------
+6. PRIOR AUTHORIZATION REQUIREMENTS
+---------------------------------------------------------------------
+Certain services require preauthorization before being performed.
+
+Examples include:
+• Advanced imaging procedures
+• Surgical procedures
+• High‑cost treatments
+• Specialty services
+
+If a claim contains a procedure requiring authorization
+but no authorization record is found:
+
+Decision: PENDING
+Action: Request prior authorization documentation
+
+---------------------------------------------------------------------
+7. MEDICAL NECESSITY REVIEW
+---------------------------------------------------------------------
+Services billed must be medically necessary based on the
+patient’s diagnosis and clinical condition.
+
+A procedure should generally correspond to a valid
+diagnosis code.
+
+Claims may be flagged if:
+• procedure does not align with diagnosis
+• treatment frequency is clinically unreasonable
+• services exceed expected utilization
+
+Outcome:
+Decision: FLAGGED
+Reason: Medical necessity review required
+
+---------------------------------------------------------------------
+8. MEDICALLY UNLIKELY EDITS (MUE)
+---------------------------------------------------------------------
+Medically Unlikely Edits define the maximum number of
+times a procedure can be performed for a patient within
+a single day.
+
+Example:
+
+Procedure: Laparoscopic Appendectomy
+Maximum Units Allowed: 1 per day
+
+If the claim exceeds the medically allowed frequency:
+
+Decision: REJECTED
+Reason: Medically unlikely procedure frequency
+
+These edits are used to prevent billing errors and
+detect abnormal utilization patterns.
+
+---------------------------------------------------------------------
+9. DUPLICATE CLAIM DETECTION
+---------------------------------------------------------------------
+Claims must be checked for duplication.
+
+A claim is considered duplicate if another claim exists
+with the same:
+
+• Patient ID
+• Procedure Code
+• Provider
+• Date of Service
+
+Duplicate submissions should be rejected.
+
+Decision: REJECTED
+Reason: Duplicate claim detected
+
+---------------------------------------------------------------------
+10. FRAUD AND ANOMALY DETECTION
+---------------------------------------------------------------------
+The system should monitor claims for potential fraud
+or abnormal billing patterns.
+
+Indicators of suspicious activity include:
+
+• unusually high billed amounts
+• repeated procedures within short intervals
+• provider billing patterns outside normal ranges
+• services inconsistent with provider specialty
+
+When anomalies are detected:
+
+Decision: FLAGGED
+Action: Route claim for investigation
+
+---------------------------------------------------------------------
+11. REIMBURSEMENT METHODS
+---------------------------------------------------------------------
+Claims may be reimbursed using several payment methodologies.
+
+Typical reimbursement models include:
+
+Fee‑For‑Service (FFS)
+Each service is billed individually based on a
+fee schedule.
+
+Per Diem Payment
+A fixed daily rate covering services during a
+patient stay.
+
+Diagnosis Related Group (DRG)
+A bundled payment based on the patient’s
+diagnosis and treatment complexity.
+
+The Safe Claims system may simulate these
+reimbursement models for decision logic.
+
+---------------------------------------------------------------------
+12. CLAIM DECISION OUTCOMES
+---------------------------------------------------------------------
+After completing all validation checks, the system
+assigns a final decision.
+
+Possible outcomes include:
+
+APPROVED
+The claim passes all validation checks and
+is approved for reimbursement.
+
+REJECTED
+The claim violates policy rules or eligibility requirements.
+
+PENDING
+Additional information or documentation is required.
+
+FLAGGED
+The claim requires manual investigation due
+to anomalies or fraud indicators.
+
+---------------------------------------------------------------------
+13. AGENTIC CLAIMS PROCESSING WORKFLOW
+---------------------------------------------------------------------
+Within the Safe Claims agentic system,
+claims will be processed using the following workflow:
+
+1. Ingest claim data (EDI claim parsing)
+2. Retrieve policy rules and supporting documents
+3. Analyze claim context
+4. Execute validation checks
+5. Detect anomalies
+6. Determine claim outcome
+
+This workflow enables autonomous claims adjudication
+while adhering to established policy rules.
