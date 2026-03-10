@@ -34,6 +34,9 @@ Return exactly this structure:
     "confidence": 0.0
 }
 
+Do not omit any field.
+Do not return multiple JSON objects.
+
 Confidence score rules:
 - 0.95 - 1.0 : all checks clearly pass or fail
 - 0.80 - 0.94: mostly clear but minor ambiguity
